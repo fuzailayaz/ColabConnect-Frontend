@@ -1,11 +1,20 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { wsService } from '@/utils/websocket';
-import api from '@/utils/api';
+import { useState, useEffect, useRef, useCallback } from "react";
+import { createClient } from "@supabase/supabase-js";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "react-hot-toast";
+import { Send, User as UserIcon } from "lucide-react";
+import { format } from "date-fns";
+
+// 🟢 Supabase Client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 interface Message {
-  id: number;
+  id: string;
   sender: string;
   receiver: string;
   content: string;
@@ -13,115 +22,246 @@ interface Message {
   read: boolean;
 }
 
+interface User {
+  id: string;
+  name: string;
+  avatar: string;
+  online: boolean;
+}
+
 export default function MessagesPage() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState('');
+  const [newMessage, setNewMessage] = useState("");
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
-  const [users, setUsers] = useState<string[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const { user: currentUser } = useAuth();
 
-  const fetchMessages = async () => {
-    try {
-      const response = await api.get<Message[]>('/api/messages/');
-      setMessages(response.data);
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-    }
+  // 🟢 Scroll to bottom on new message
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const sendMessage = async () => {
-    if (!selectedUser || !newMessage.trim()) return;
+  // 🟢 Fetch users from Supabase
+  const fetchUsers = useCallback(async () => {
+    try {
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("id, name, avatar, online");
+
+      if (userError) throw userError;
+
+      if (!userData) {
+        throw new Error('No user data received');
+      }
+
+      // Sync users with MongoDB
+      await Promise.all(userData.map(async (user) => {
+        try {
+          const response = await fetch('/api/sync-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(user)
+          });
+          if (!response.ok) {
+            throw new Error(`Failed to sync user ${user.id}`);
+          }
+        } catch (syncError) {
+          console.warn(`Failed to sync user ${user.id} with MongoDB:`, syncError);
+        }
+      }));
+
+      setUsers(userData.filter((user) => user.id !== currentUser?.id));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load users';
+      console.error("Error fetching users:", errorMessage);
+      setError(errorMessage);
+      toast.error(errorMessage);
+    }
+  }, [currentUser?.id]);
+
+  // 🟢 Fetch messages from Supabase
+  const fetchMessages = useCallback(async () => {
+    if (!selectedUser) return;
 
     try {
-      await api.post('/api/messages/', {
-        receiver: selectedUser,
-        content: newMessage,
-      });
-      setNewMessage('');
-      fetchMessages();
+      setLoading(true);
+      setError(null);
+
+      const { data: messageData, error: messageError } = await supabase
+        .from("messages")
+        .select("*")
+        .or(`sender.eq.${currentUser?.id},receiver.eq.${selectedUser}`)
+        .order('timestamp', { ascending: true });
+
+      if (messageError) throw messageError;
+
+      if (!messageData) {
+        throw new Error('No message data received');
+      }
+
+      setMessages(messageData);
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error("Error fetching messages:", error);
+      setError("Failed to load messages");
+      toast.error("Failed to load messages");
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [selectedUser, currentUser?.id]);
 
-  useEffect(() => {
-    fetchMessages();
-  }, []);
+  // 🟢 Setup WebSocket Connection
+  const connectWebSocket = useCallback(() => {
+    if (!selectedUser) return;
 
-  useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    if (selectedUser) {
-      const roomName = `chat_${selectedUser}`;
-      const ws = wsService.connect(roomName, token || '');
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      toast.error("Authentication token not found");
+      return;
+    }
 
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
+    const ws = new WebSocket(
+      `wss://your-websocket-server.com/chat?room=${selectedUser}&token=${token}`
+    );
+
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setWsConnected(true);
+      toast.success("Connected to chat");
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data: Message = JSON.parse(event.data);
         setMessages((prev) => [...prev, data]);
-      };
+        scrollToBottom();
+      } catch (error) {
+        console.error("Error parsing message:", error);
+      }
+    };
 
-      return () => {
-        wsService.disconnect();
-      };
-    }
+    ws.onclose = () => {
+      setWsConnected(false);
+      toast.error("Connection lost. Attempting to reconnect...");
+      setTimeout(connectWebSocket, 3000);
+    };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      ws.close();
+    };
+
+    return () => {
+      if (wsRef.current) wsRef.current.close();
+    };
   }, [selectedUser]);
 
+  // 🟢 Listen for Realtime Messages via Supabase
+  useEffect(() => {
+    if (!selectedUser) return;
+
+    const messageSubscription = supabase
+      .channel(`chat:${selectedUser}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+        setMessages((prev) => [...prev, payload.new as Message]);
+        scrollToBottom();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(messageSubscription);
+    };
+  }, [selectedUser]);
+
+  // 🟢 Fetch Users & Messages
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  useEffect(() => {
+    if (selectedUser) {
+      fetchMessages();
+      const cleanup = connectWebSocket();
+      return () => {
+        cleanup?.();
+      };
+    }
+  }, [selectedUser, fetchMessages, connectWebSocket]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  // 🟢 Send Message
+  const sendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser || !newMessage.trim()) return;
+
+    const messageData: Omit<Message, "id"> = {
+      sender: currentUser?.id || "",
+      receiver: selectedUser,
+      content: newMessage.trim(),
+      timestamp: new Date().toISOString(),
+      read: false,
+    };
+
+    try {
+      const { data, error } = await supabase
+        .from("messages")
+        .insert([messageData])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setMessages((prev) => [...prev, data as Message]);
+      setNewMessage("");
+      scrollToBottom();
+
+      wsRef.current?.send(JSON.stringify(data));
+    } catch (error) {
+      console.error("Error sending message:", error);
+      toast.error("Failed to send message");
+    }
+  };
+
   return (
-    <div className="flex h-screen">
-      {/* Users sidebar */}
-      <div className="w-1/4 border-r p-4">
-        <h2 className="text-xl font-bold mb-4">Conversations</h2>
-        <div className="space-y-2">
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Conversations</h2>
+        </div>
+        <div className="overflow-y-auto h-full">
           {users.map((user) => (
-            <div
-              key={user}
-              className={`p-2 cursor-pointer rounded ${
-                selectedUser === user ? 'bg-blue-100' : 'hover:bg-gray-100'
-              }`}
-              onClick={() => setSelectedUser(user)}
-            >
-              {user}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Messages area */}
-      <div className="flex-1 flex flex-col">
-        <div className="flex-1 p-4 overflow-y-auto">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`mb-4 p-3 rounded-lg ${
-                message.sender === 'currentUser'
-                  ? 'bg-blue-500 text-white ml-auto'
-                  : 'bg-gray-200'
-              } max-w-[70%]`}
-            >
-              <p className="text-sm font-semibold">{message.sender}</p>
-              <p>{message.content}</p>
-              <p className="text-xs mt-1 opacity-70">
-                {new Date(message.timestamp).toLocaleString()}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        {/* Message input */}
-        <div className="p-4 border-t">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              className="flex-1 border rounded-lg px-4 py-2"
-              placeholder="Type your message..."
-            />
             <button
-              onClick={sendMessage}
-              className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600"
+              key={user.id}
+              onClick={() => setSelectedUser(user.id)}
+              className={`w-full p-4 flex items-center space-x-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                selectedUser === user.id ? "bg-blue-50 dark:bg-blue-900" : ""
+              }`}
             >
-              Send
+              <div className="relative">
+                {user.avatar ? (
+                  <img src={user.avatar} alt={user.name} className="w-10 h-10 rounded-full" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center">
+                    <UserIcon className="w-6 h-6 text-gray-500 dark:text-gray-400" />
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-medium text-gray-900 dark:text-white">{user.name}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {user.online ? "Online" : "Offline"}
+                </p>
+              </div>
             </button>
-          </div>
+          ))}
         </div>
       </div>
     </div>

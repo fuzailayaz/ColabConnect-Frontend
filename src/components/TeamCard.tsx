@@ -25,7 +25,7 @@ export default function TeamCard({ team }: TeamProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300">
+    <div className="bg-white dark:bg-[#1C1C1E] rounded-xl shadow-sm hover:shadow-md transition-all duration-300">
       <div className="p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
@@ -44,7 +44,7 @@ export default function TeamCard({ team }: TeamProps) {
           {team.members.slice(0, 3).map((member) => (
             <div
               key={member.id}
-              className="flex items-center bg-gray-50 dark:bg-gray-700 rounded-full px-3 py-1"
+              className="flex items-center bg-gray-50 dark:bg-[#2C2C2E] rounded-full px-3 py-1 hover:bg-gray-100 dark:hover:bg-[#3C3C3E] transition-colors duration-200"
             >
               <div className="relative w-6 h-6 mr-2">
                 <Image
@@ -62,7 +62,7 @@ export default function TeamCard({ team }: TeamProps) {
           {team.members.length > 3 && (
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+              className="text-sm text-[#3ECF8E] dark:text-[#3ECF8E] hover:opacity-80 transition-opacity duration-200"
             >
               +{team.members.length - 3} more
             </button>
@@ -74,7 +74,7 @@ export default function TeamCard({ team }: TeamProps) {
             {team.members.slice(3).map((member) => (
               <div
                 key={member.id}
-                className="flex items-center justify-between bg-gray-50 dark:bg-gray-700 rounded-lg p-2"
+                className="flex items-center justify-between bg-gray-50 dark:bg-[#2C2C2E] rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-[#3C3C3E] transition-colors duration-200"
               >
                 <div className="flex items-center">
                   <div className="relative w-8 h-8 mr-3">

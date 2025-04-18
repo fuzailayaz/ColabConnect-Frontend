@@ -16,9 +16,9 @@ interface UserProfile {
     twitter?: string;
   };
   stats: {
-    projectsCompleted: number;
-    tasksCompleted: number;
-    teamCollaborations: number;
+    projectsCompleted: number | null;
+    tasksCompleted: number | null;
+    teamCollaborations: number | null;
   };
 }
 
@@ -31,7 +31,7 @@ export default function UserProfileCard({ profile, onEdit }: UserProfileCardProp
   const [showMore, setShowMore] = useState(false);
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm">
+    <div className="bg-white dark:bg-[#1C1C1E] rounded-xl shadow-sm hover:shadow-md transition-all duration-300">
       <div className="p-6">
         <div className="flex items-start justify-between mb-6">
           <div className="flex items-center space-x-4">
@@ -75,7 +75,7 @@ export default function UserProfileCard({ profile, onEdit }: UserProfileCardProp
             {profile.skills.map((skill, index) => (
               <span
                 key={index}
-                className="bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-3 py-1 rounded-full text-sm"
+                className="bg-gray-100 dark:bg-[#2C2C2E] hover:bg-gray-100 dark:hover:bg-[#3C3C3E] transition-colors duration-200 text-gray-800 dark:text-gray-200 px-3 py-1 rounded-full text-sm"
               >
                 {skill}
               </span>

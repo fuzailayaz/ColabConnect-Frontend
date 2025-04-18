@@ -3,39 +3,26 @@
 import { useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import { format } from 'date-fns';
-import axios from 'axios';
+import { motion } from 'framer-motion';
 
-interface Task {
-  id: string;
-  title: string;
-  description: string;
-  status: 'TODO' | 'IN_PROGRESS' | 'COMPLETED';
-  priority: 'LOW' | 'MEDIUM' | 'HIGH';
-  assignee: {
-    id: string;
-    name: string;
-    avatar: string;
-  };
-  dueDate: string;
-  tags: string[];
-}
+import type { Task } from '@/types/dashboard';
 
 interface TaskCardProps {
   task: Task;
   index: number;
-  onStatusChange?: (taskId: string, newStatus: Task['status']) => void;
+  onStatusChange?: (id: string, status: 'pending' | 'in-progress' | 'completed') => Promise<boolean>;
 }
 
-const statusColors = {
-  TODO: 'bg-gray-100 text-gray-800',
-  IN_PROGRESS: 'bg-blue-100 text-blue-800',
-  COMPLETED: 'bg-green-100 text-green-800',
+const priorityColors: { [key: string]: string } = {
+  HIGH: 'bg-red-100 text-red-800',
+  MEDIUM: 'bg-yellow-100 text-yellow-800',
+  LOW: 'bg-green-100 text-green-800',
 };
 
-const priorityColors = {
-  LOW: 'bg-green-100 text-green-800',
-  MEDIUM: 'bg-yellow-100 text-yellow-800',
-  HIGH: 'bg-red-100 text-red-800',
+const statusColors: { [key: string]: string } = {
+  pending: 'bg-gray-100 text-gray-800',
+  'in-progress': 'bg-blue-100 text-blue-800',
+  completed: 'bg-green-100 text-green-800',
 };
 
 export default function TaskCard({ task, index, onStatusChange }: TaskCardProps) {
@@ -44,91 +31,75 @@ export default function TaskCard({ task, index, onStatusChange }: TaskCardProps)
   return (
     <Draggable draggableId={task.id} index={index}>
       {(provided, snapshot) => (
-        <div
+        <div 
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
-          className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 ${
-            snapshot.isDragging ? 'shadow-lg' : ''
-          }`}
-          style={{
-            ...provided.draggableProps.style,
-            opacity: snapshot.isDragging ? 0.9 : 1,
-            transform: snapshot.isDragging
-              ? `${provided.draggableProps.style?.transform} scale(1.02)`
-              : provided.draggableProps.style?.transform,
-          }}
         >
-          <div className="p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-                  {task.title}
-                </h3>
-                <div className="flex items-center gap-2">
-                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors[task.status]}`}>
-                    {task.status.replace('_', ' ')}
-                  </span>
-                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${priorityColors[task.priority]}`}>
-                    {task.priority}
-                  </span>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm border p-4 mb-4 ${
+              snapshot.isDragging ? 'shadow-lg' : ''
+            }`}
+          >
+            <div className="flex justify-between items-start mb-3">
+              <h3 className="font-medium text-gray-900 dark:text-white">{task.title}</h3>
+              <span className={`px-2 py-1 rounded text-xs font-medium ${priorityColors[task.priority]}`}>
+                {task.priority}
+              </span>
             </div>
 
-            <div className={`mt-4 space-y-4 ${isExpanded ? '' : 'hidden'}`}>
-              <p className="text-gray-600 dark:text-gray-300">
-                {task.description}
+            <div className="mb-3">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {isExpanded ? task.description : `${task.description?.slice(0, 100)}...`}
               </p>
+              {task.description && task.description.length > 100 && (
+                <button
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="text-sm text-blue-600 hover:text-blue-800 mt-1"
+                >
+                  {isExpanded ? 'Show less' : 'Read more'}
+                </button>
+              )}
+            </div>
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <img
-                    src={task.assignee.avatar}
-                    alt={task.assignee.name}
-                    className="w-6 h-6 rounded-full"
-                  />
-                  <span className="text-sm text-gray-600 dark:text-gray-300">
-                    {task.assignee.name}
-                  </span>
-                </div>
-
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  Due {format(new Date(task.dueDate), 'MMM d, yyyy')}
-                </span>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-2">
+                <img
+                  src={task.assignee?.avatar || ''}
+                  alt={task.assignee?.name || ''}
+                  className="w-6 h-6 rounded-full"
+                />
+                <span className="text-sm text-gray-600 dark:text-gray-300">{task.assignee?.name}</span>
               </div>
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                Due {task.due_date ? format(new Date(task.due_date), 'MMM d') : 'No due date'}
+              </span>
+            </div>
 
+            <div className="flex items-center justify-between">
               <div className="flex flex-wrap gap-2">
-                {task.tags.map((tag, index) => (
+                {task.tags.map((tag) => (
                   <span
-                    key={index}
-                    className="bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-xs px-2.5 py-0.5 rounded"
+                    key={tag}
+                    className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded text-xs"
                   >
                     {tag}
                   </span>
                 ))}
               </div>
-
               <select
                 value={task.status}
-                onChange={(e) => onStatusChange?.(task.id, e.target.value as Task['status'])}
-                className={`w-full mt-2 text-sm rounded-lg px-3 py-2 ${statusColors[task.status]}`}
+                onChange={(e) => onStatusChange?.(task.id, e.target.value as 'pending' | 'in-progress' | 'completed')}
+                className={`text-sm rounded-lg px-2 py-1 ${statusColors[task.status]}`}
               >
-                <option value="TODO">Todo</option>
-                <option value="IN_PROGRESS">In Progress</option>
-                <option value="COMPLETED">Completed</option>
+                <option value="pending">Todo</option>
+                <option value="in-progress">In Progress</option>
+                <option value="completed">Completed</option>
               </select>
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
     </Draggable>

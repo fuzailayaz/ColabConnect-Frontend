@@ -26,7 +26,9 @@ const DashboardCard = ({
   onClick,
   children,
 }: DashboardCardProps) => {
-  const { isDarkMode } = useTheme();
+
+  const { theme } = useTheme();
+  const isDarkMode = theme.mode === 'dark';
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
 
@@ -129,6 +131,4 @@ const DashboardCard = ({
       `} />
     </motion.div>
   );
-};
-
-export default DashboardCard;
+};export default DashboardCard;

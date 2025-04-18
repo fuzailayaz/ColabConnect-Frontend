@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import Button from "@/components/ui/Button"; // Corrected import
-import Input from "@/components/ui/Input"; // Corrected import
+import { Button } from "@/components/ui/button";
+import Input from "@/components/ui/Input";
 import { getSkills, addSkill, deleteSkill } from "@/utils/api"; // Ensure these functions are defined and exported
 
 const Skills = () => {
@@ -83,7 +83,7 @@ const Skills = () => {
           <li key={index} className="flex justify-between items-center border p-2 rounded-lg">
             <span>{skill}</span>
             <Button
-              variant="destructive"
+              variant="secondary"
               onClick={() => handleDeleteSkill(skill)}
               disabled={loading}
             >

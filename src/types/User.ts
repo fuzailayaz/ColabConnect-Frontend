@@ -1,8 +1,8 @@
 // types/User.ts
-export interface User {
+export interface AppUser {
   id: number;
   email: string;
-  username?: string; // Make username optional
+  username?: string;
   first_name?: string;
   last_name?: string;
   avatar?: string;

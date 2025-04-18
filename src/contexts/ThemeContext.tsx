@@ -1,156 +1,100 @@
 "use client";
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 
-interface ThemeContextType {
-  isDarkMode: boolean;
-  toggleTheme: () => void;
-  theme: Theme;
-  setThemeColor: (color: string) => void;
-}
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
-interface Theme {
+export interface Theme {
+  input: string | undefined;
+  primaryForeground: string | undefined;
+  mode: 'light' | 'dark';
   primary: string;
   secondary: string;
   accent: string;
   background: string;
   text: string;
+  textMuted: string;
+  sidebar: string;
+  card: string;
+  border: string;
+  hover: string;
 }
 
-const defaultThemes = {
-  light: {
-    primary: '#3B82F6',
-    secondary: '#6366F1',
-    accent: '#8B5CF6',
-    background: '#FFFFFF',
-    text: '#1F2937',
-  },
-  dark: {
-    primary: '#60A5FA',
-    secondary: '#818CF8',
-    accent: '#A78BFA',
-    background: '#111827',
-    text: '#F9FAFB',
-  },
+// Light Theme
+const lightTheme: Theme = {
+  mode: 'light',
+  primary: '#22C55E', // Green for buttons
+  secondary: '#F2F2F7',
+  accent: '#4AA8FF',
+  background: '#FFFFFF',
+  text: '#1C1C1E',
+  textMuted: '#8E8E93',
+  sidebar: '#F2F2F7',
+  card: '#FFFFFF',
+  border: '#D1D1D6',
+  hover: '#E5E5EA',
+  input: '#FFFFFF',
+  primaryForeground: '#FFFFFF'
 };
 
-const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+// Dark Theme with specified colors
+const darkTheme: Theme = {
+  mode: 'dark',
+  primary: '#22C55E',                 // Tailwind green-500 for buttons
+  secondary: '#1C1C1C',               // Sidebar or slightly lighter bg
+  accent: '#4AA8FF',                  // Blue highlight for code/keywords
+  background: '#0F0F0F',              // Main dark background (very dark gray/black)
+  text: '#E0E0E0',                    // Primary white-ish text
+  textMuted: '#A3A3A3',               // Muted gray text
+  sidebar: '#1C1C1C',                 // Sidebar background (#1c1c1c – #202020)
+  card: '#1E1E1E',                    // Editor/Card background
+  border: '#2C2C2C',                  // Divider/border lines
+  hover: '#2C2C2C',                   // Hover state background
+  input: '#1E1E1E',                   // Input background
+  primaryForeground: '#FFFFFF'        // Text on primary buttons
+};
 
-export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [theme, setTheme] = useState<Theme>(defaultThemes.light);
+const ThemeContext = createContext<{
+  theme: Theme;
+  toggleTheme: () => void;
+} | undefined>(undefined);
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setTheme] = useState<Theme>(lightTheme);
 
   useEffect(() => {
-    // Check for system preference and stored preference
-    const storedTheme = localStorage.getItem('theme');
-    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
-    setIsDarkMode(storedTheme === 'dark' || (!storedTheme && systemPrefersDark));
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const initialMode = (savedTheme === 'dark' || (!savedTheme && prefersDark)) ? 'dark' : 'light';
 
-    // Listen for system theme changes
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleChange = (e: MediaQueryListEvent) => {
-      if (!localStorage.getItem('theme')) {
-        setIsDarkMode(e.matches);
-      }
-    };
-
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
+    if (initialMode === 'dark') {
+      setTheme(darkTheme);
+      document.documentElement.classList.add('dark');
+    } else {
+      setTheme(lightTheme);
+      document.documentElement.classList.remove('dark');
+    }
   }, []);
 
-  useEffect(() => {
-    // Apply theme to document
-    document.documentElement.classList.toggle('dark', isDarkMode);
-    setTheme(isDarkMode ? defaultThemes.dark : defaultThemes.light);
-    
-    // Store preference
-    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
-
-    // Animate transition
-    document.documentElement.style.setProperty(
-      '--transition-speed',
-      '200ms'
-    );
-  }, [isDarkMode]);
-
   const toggleTheme = () => {
-    setIsDarkMode((prev) => !prev);
-  };
-
-  const setThemeColor = (color: string) => {
-    setTheme((prev) => ({
-      ...prev,
-      primary: color,
-    }));
-    document.documentElement.style.setProperty('--color-primary', color);
-  };
-
-  // CSS Variables for dynamic theming
-  useEffect(() => {
-    const root = document.documentElement;
-    Object.entries(theme).forEach(([key, value]) => {
-      root.style.setProperty(`--color-${key}`, value);
+    setTheme(prevTheme => {
+      const newMode = prevTheme.mode === 'light' ? 'dark' : 'light';
+      const newTheme = newMode === 'light' ? lightTheme : darkTheme;
+      localStorage.setItem('theme', newMode);
+      document.documentElement.classList.toggle('dark', newMode === 'dark');
+      return newTheme;
     });
-  }, [theme]);
+  };
 
   return (
-    <ThemeContext.Provider value={{ isDarkMode, toggleTheme, theme, setThemeColor }}>
-      <AnimatePresence mode='wait'>
-        <motion.div
-          key={isDarkMode ? 'dark' : 'light'}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          {children}
-        </motion.div>
-      </AnimatePresence>
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      {children}
     </ThemeContext.Provider>
   );
-};
+}
 
-export const useTheme = () => {
+export function useTheme() {
   const context = useContext(ThemeContext);
   if (context === undefined) {
     throw new Error('useTheme must be used within a ThemeProvider');
   }
   return context;
-};
-
-// Custom hook for theme-aware colors
-export const useThemeColor = (colorKey: keyof Theme) => {
-  const { theme } = useTheme();
-  return theme[colorKey];
-};
-
-// CSS utility classes generator
-export const generateThemeColors = () => {
-  return `
-    :root {
-      --transition-speed: 200ms;
-      --color-primary: ${defaultThemes.light.primary};
-      --color-secondary: ${defaultThemes.light.secondary};
-      --color-accent: ${defaultThemes.light.accent};
-      --color-background: ${defaultThemes.light.background};
-      --color-text: ${defaultThemes.light.text};
-    }
-
-    .dark {
-      --color-primary: ${defaultThemes.dark.primary};
-      --color-secondary: ${defaultThemes.dark.secondary};
-      --color-accent: ${defaultThemes.dark.accent};
-      --color-background: ${defaultThemes.dark.background};
-      --color-text: ${defaultThemes.dark.text};
-    }
-
-    * {
-      transition: background-color var(--transition-speed) ease-in-out,
-                  border-color var(--transition-speed) ease-in-out,
-                  color var(--transition-speed) ease-in-out;
-    }
-  `;
-};
-
-export default ThemeContext;
+}

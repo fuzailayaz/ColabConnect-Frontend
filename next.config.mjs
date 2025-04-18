@@ -5,10 +5,9 @@ const nextConfig = {
   images: {
     remotePatterns: [
       {
-        protocol: 'http',
-        hostname: 'localhost',
-        port: '8000',
-        pathname: '/**',
+        protocol: "https",
+        hostname: (process.env.NEXT_PUBLIC_SUPABASE_URL || "https://nvbvklsjoaxftmglmsba.supabase.co").replace("https://", ""),
+        pathname: "/storage/v1/object/public/**", // Allow images from Supabase storage
       },
     ],
   },
@@ -20,31 +19,17 @@ const nextConfig = {
 
   async rewrites() {
     return [
-      // Redirect all API calls to Django backend except auth routes
       {
-        source: '/api/:path*',
-        destination: 'http://localhost:8000/api/:path*',
-        has: [
-          {
-            type: 'query',
-            key: 'path',
-            value: '(?!auth).*', // Exclude `auth` routes from being rewritten
-          },
-        ],
+        source: "/api/auth/:path*",
+        destination: `${process.env.NEXT_PUBLIC_SUPABASE_URL || "https://nvbvklsjoaxftmglmsba.supabase.co"}/auth/v1/:path*`,
       },
-    ];
-  },
-
-  async headers() {
-    return [
       {
-        source: '/api/:path*',
-        headers: [
-          { key: 'Access-Control-Allow-Credentials', value: 'true' },
-          { key: 'Access-Control-Allow-Origin', value: '*' },
-          { key: 'Access-Control-Allow-Methods', value: 'GET,DELETE,PATCH,POST,PUT' },
-          { key: 'Access-Control-Allow-Headers', value: 'Authorization, X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version' },
-        ],
+        source: "/api/storage/:path*",
+        destination: `${process.env.NEXT_PUBLIC_SUPABASE_URL || "https://nvbvklsjoaxftmglmsba.supabase.co"}/storage/v1/:path*`,
+      },
+      {
+        source: "/api/functions/:path*",
+        destination: `${process.env.NEXT_PUBLIC_SUPABASE_URL || "https://nvbvklsjoaxftmglmsba.supabase.co"}/functions/v1/:path*`,
       },
     ];
   },
